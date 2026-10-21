@@ -8,7 +8,7 @@ const fs = require('node:fs');
 (async () => {
   const browser = await chromium.launch({ headless: true,
     ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
-  const base = (process.env.BOOK_URL || 'http://127.0.0.1:8784/').replace(/\/?$/, '/');
+  const base = (process.env.BOOK_URL || 'http://127.0.0.1:8787/').replace(/\/?$/, '/');
   try {
     const context = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1440, height: 1000 } });
     const page = await context.newPage();

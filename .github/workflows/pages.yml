@@ -1,0 +1,96 @@
+name: Build verify and publish recovery book
+on:
+  push:
+    branches: [main]
+    paths:
+      - book/**
+      - lab/**
+      - scripts/**
+      - web/**
+      - epub/**
+      - LICENSE
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: book-pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: r-lib/actions/setup-pandoc@v2
+        with:
+          pandoc-version: '3.12.1'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Execute ten real four-instance MySQL recovery scenarios
+        run: |
+          python3 lab/run.py --evidence evidence/runtime.json
+          cp evidence/runtime.json book/validation.json
+      - name: Build all reading formats
+        run: python3 scripts/build.py
+      - name: Verify source EPUB and website integrity
+        run: python3 scripts/verify.py
+      - name: EPUBCheck zero errors and warnings
+        run: sh scripts/epubcheck.sh
+      - name: Execute downloaded ZIP independently with real MySQL instances
+        run: |
+          task_archive_dir="$RUNNER_TEMP/mysql-recovery-archive"
+          python3 -m zipfile -e site/downloads/lab.zip "$task_archive_dir"
+          python3 "$task_archive_dir/lab/run.py" --evidence evidence/archive-runtime.json
+          python3 - <<'PY'
+          import json
+          expected={'replication-bootstrap','consistent-snapshot-under-writes','clean-baseline-restore',
+            'missing-log-cannot-reach-target','transaction-boundary-pitr','accidental-delete-replicates',
+            'pause-and-catch-up','unfenced-promotion-refused','fenced-manual-failover-with-observed-loss',
+            'returning-old-primary-quarantined'}
+          for filename in ['evidence/runtime.json','evidence/archive-runtime.json']:
+              report=json.load(open(filename))
+              assert report['status']=='PASS' and report['scenario_count']==10
+              assert {s['name'] for s in report['scenarios']}==expected
+              assert len(report['scenarios'])==10 and all(s['status']=='PASS' for s in report['scenarios'])
+          PY
+      - name: Install browser tools
+        run: |
+          npm install --no-save --package-lock=false playwright@1.64.1
+          npx playwright install --with-deps chromium
+      - name: Verify all chapters at 320 and 390 pixels including no-JS
+        run: |
+          python3 -m http.server 8787 --bind 127.0.0.1 --directory site > /tmp/mysql-recovery-http.log 2>&1 &
+          node scripts/browser-check.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mysql-recovery-runtime
+          path: evidence/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: book-downloads
+          path: site/downloads/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deploy

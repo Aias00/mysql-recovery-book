@@ -219,14 +219,14 @@ def cover(meta: dict) -> str:
     title = ''.join(f'<text x="98" y="{380+i*116}" font-size="86" font-weight="650">{esc(line)}</text>'
                     for i, line in enumerate(lines))
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1800" viewBox="0 0 1200 1800" role="img" aria-labelledby="title desc">
-<title id="title">{esc(meta['title'])}</title><desc id="desc">浅色背景、文档投影到混合检索和引用复核的流程图、中文书名组成的电子书封面。</desc>
+<title id="title">{esc(meta['title'])}</title><desc id="desc">浅色背景、基线备份、事务回放与账本核对的流程图、中文书名组成的电子书封面。</desc>
 <rect width="1200" height="1800" fill="#f7f7f3"/><rect x="60" y="60" width="1080" height="1680" rx="6" fill="none" stroke="#d8ded7" stroke-width="2"/>
 <g fill="#292e34" font-family="PingFang SC,Noto Sans CJK SC,Microsoft YaHei,sans-serif">
 <text x="98" y="168" font-size="25" letter-spacing="5" fill="#28685c">{esc(meta.get('cover_label', 'ENGINEERING NOTES'))}</text>
 <path d="M98 215H1102" stroke="#28685c" stroke-width="3"/>{title}
 <g fill="none" stroke="#28685c" stroke-width="6"><rect x="100" y="850" width="250" height="230" rx="18"/><rect x="475" y="850" width="250" height="230" rx="18"/><rect x="850" y="850" width="250" height="230" rx="18"/>
 <path d="M350 965H475M725 965H850M150 915H300M150 965H280M150 1015H300M525 915H675M525 965H650M525 1015H675M900 965L950 1015L1050 905"/></g>
-<g font-size="27" fill="#626b74" text-anchor="middle"><text x="225" y="1150">文档投影</text><text x="600" y="1150">混合检索</text><text x="975" y="1150">引用复核</text></g>
+<g font-size="27" fill="#626b74" text-anchor="middle"><text x="225" y="1150">基线备份</text><text x="600" y="1150">事务回放</text><text x="975" y="1150">账本核对</text></g>
 <text x="98" y="1445" font-size="32" fill="#626b74">{esc(meta.get('cover_subtitle', '原理 · 实验 · 验证'))}</text>
 <path d="M98 1535H1102" stroke="#d8ded7" stroke-width="2"/>
 <text x="98" y="1640" font-size="38">{esc(meta['author'])}</text><text x="1102" y="1640" font-size="24" text-anchor="end" fill="#626b74">{esc(meta['version'])} · 中文版</text>

@@ -34,6 +34,7 @@ class Lab:
         self.tmp = tempfile.TemporaryDirectory(prefix=self.prefix)
         self.report = {'status': 'RUNNING', 'image': IMAGE, 'scenarios': [], 'scope':
             'Isolated Linux Docker bridge; teaching data; manual failover; no production routing, automatic HA or cross-region claim.'}
+        self.report['source_sha'] = os.environ.get('GITHUB_SHA', 'local-unattributed-run')
         self.output = Path(output)
         self.output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -72,6 +73,15 @@ class Lab:
                      f'type=bind,source={directory},target=/archive,readonly', self.prefix + '-tools',
                      'mysqlbinlog', '--start-position=' + str(startpos), '--stop-position=' + str(stoppos),
                      '/archive/' + filename], check=check)
+
+    def stop_source(self, stage):
+        call(['docker', 'stop', '--time', '10', self.prefix + '-source'])
+        state = json.loads(call(['docker', 'inspect', '--format', '{{json .State}}',
+                                 self.prefix + '-source']).stdout)
+        assert state['Running'] is False and state['OOMKilled'] is False
+        self.report.setdefault('stop_observations', []).append({'stage': stage,
+            'running': state['Running'], 'exit_code': state['ExitCode'],
+            'finished_at': state['FinishedAt'], 'grace_seconds': 10})
 
     def feed(self, name, data):
         return call(['docker', 'exec', '-i', '-e', 'MYSQL_PWD=' + PASSWORD, self.prefix + '-' + name,
@@ -212,7 +222,7 @@ class Lab:
         self.report['binlog_archive'] = {'file': filename, 'bytes': archived_file.stat().st_size,
             'sha256': hashlib.sha256(archived_file.read_bytes()).hexdigest(),
             'sealed_by_flush': True, 'replay_mount_readonly': True, 'replay_network': 'none'}
-        call(['docker', 'stop', '--time', '10', self.prefix + '-source'])
+        self.stop_source('offline-archive-replay')
         # Remove the actual required archive: the failure must not mutate the clean baseline.
         held = archived_file.with_suffix('.held')
         archived_file.rename(held)
@@ -274,7 +284,7 @@ class Lab:
         self.check('unfenced-promotion-refused', old_primary_running=True, replica_remains_read_only=True,
                    actual_write_rejection=denied)
         failure_start = time.monotonic()
-        call(['docker', 'stop', '--time', '10', self.prefix + '-source'])
+        self.stop_source('failover-fence')
         self.promote()
         self.sql('replica', self.order(6001, 'new-primary-only', 19))
         promoted = self.state('replica')

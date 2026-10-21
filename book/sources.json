@@ -1,0 +1,101 @@
+[
+  {
+    "id": "R01",
+    "title": "Using mysqldump for Backups",
+    "url": "https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/using-mysqldump.html",
+    "accessed": "2026-10-21",
+    "sha256": "b709140fa3f7698adf0393ec572a1768ceb6bae6d8223f40f66a4944aa598019",
+    "bytes": 9217,
+    "supports": "逻辑备份恢复需执行SQL；一致性、账户与恢复目标需要单独验证。"
+  },
+  {
+    "id": "R02",
+    "title": "mysqldump — A Database Backup Program",
+    "url": "https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/mysqldump.html",
+    "accessed": "2026-10-21",
+    "sha256": "8851ec12f70deeabda71289b50b867a2929ce0b68d3b3b5bdd81787cdffa3dfa",
+    "bytes": 247941,
+    "supports": "single-transaction限事务表快照，source-data记录复制坐标，DDL并发有额外限制。"
+  },
+  {
+    "id": "R03",
+    "title": "Point-in-Time Recovery Using Binary Log",
+    "url": "https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/point-in-time-recovery.html",
+    "accessed": "2026-10-21",
+    "sha256": "7b4d9a6f018d0119089e344946df2c84dd65ace396ede4baa782ea40696fbc8e",
+    "bytes": 5060,
+    "supports": "完整备份之后用二进制日志进行时间点恢复，必须具备连续日志。"
+  },
+  {
+    "id": "R04",
+    "title": "Point-in-Time Recovery Using Event Positions",
+    "url": "https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/point-in-time-recovery-positions.html",
+    "accessed": "2026-10-21",
+    "sha256": "4e6a691730d0ec03cc736581553790e01d2993d6a0fdb3a9236a0df0fcfe3a8f",
+    "bytes": 14362,
+    "supports": "以事件位置标识恢复范围，先检查事件再选择排除边界。"
+  },
+  {
+    "id": "R05",
+    "title": "Replication with Global Transaction Identifiers",
+    "url": "https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/replication-gtids.html",
+    "accessed": "2026-10-21",
+    "sha256": "cfcc065db9a6621ff943e87a1ac1fa7dea2c4799077f64b8a6398c216acde633",
+    "bytes": 9522,
+    "supports": "GTID识别已提交事务，自动定位并不证明业务数据相等。"
+  },
+  {
+    "id": "R06",
+    "title": "Setting Up Replication Using GTIDs",
+    "url": "https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/replication-gtids-howto.html",
+    "accessed": "2026-10-21",
+    "sha256": "ff71338a2b0845b3bb3d9ee2c15ce696a80ffbf80df2fa0ef8699046d5af3688",
+    "bytes": 16415,
+    "supports": "实例身份、GTID配置、账户、源配置与一致初始数据是建立复制的条件。"
+  },
+  {
+    "id": "R07",
+    "title": "Replication Threads",
+    "url": "https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/replication-threads.html",
+    "accessed": "2026-10-21",
+    "sha256": "90f7b3ecea73b749f1d433df870aeef1c116118512dc23f5c9dfe2a172b80f3f",
+    "bytes": 8041,
+    "supports": "接收与应用线程进度不同，接收日志不等于事务已执行。"
+  },
+  {
+    "id": "R08",
+    "title": "Switching Sources During Failover",
+    "url": "https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/replication-solutions-switch.html",
+    "accessed": "2026-10-21",
+    "sha256": "ed0d10e835c28e2eff2b18719201f9febf1cb25defd6ea05c5a55aa3ff26a488",
+    "bytes": 15599,
+    "supports": "切换需要选择副本、处理位置与数据差异，防止旧源继续提供写入。"
+  },
+  {
+    "id": "R09",
+    "title": "mysqlbinlog — Utility for Processing Binary Log Files",
+    "url": "https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/mysqlbinlog.html",
+    "accessed": "2026-10-21",
+    "sha256": "c07e3150d9cd3790ed8dd0137d59a9f536b2ecfeeae5d2aec891ce95d615a1f5",
+    "bytes": 165246,
+    "supports": "回放使用可执行输出，位置与GTID选项需结合服务器状态分析。"
+  },
+  {
+    "id": "R10",
+    "title": "SHOW REPLICA STATUS Statement",
+    "url": "https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/show-replica-status.html",
+    "accessed": "2026-10-21",
+    "sha256": "f67613deee8956092ddf13b5d003f7d8acd3660fc39b19a3e6e1ea6e0917db32",
+    "bytes": 51993,
+    "supports": "延迟和线程状态有解释条件，不是业务恢复成功的充分条件。"
+  },
+  {
+    "id": "R11",
+    "title": "Backup and Recovery Types",
+    "url": "https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/backup-types.html",
+    "accessed": "2026-10-21",
+    "sha256": "250b4296a31e6a67bacc79b81ef7bcaf04df88621d4ab0ae84977b692f83137b",
+    "bytes": 19704,
+    "supports": "逻辑/物理、完整/增量和在线/离线描述不同维度。"
+  }
+]

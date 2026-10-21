@@ -48,6 +48,13 @@ class Document(HTMLParser):
 def main():
     meta = build.metadata()
     expected = build.parse_chapters(build.chapters(meta))
+    bodies = [c for c in expected if re.match(r'^第[0-9]+章', c['title'])]
+    assert len(bodies) == 18
+    prose = '\n'.join(re.sub(r'```.*?```|~~~~~~.*?~~~~~~', '', c['markdown'], flags=re.S) for c in bodies)
+    assert len(re.findall(r'[\u4e00-\u9fff]', prose)) >= 25000
+    runtime = json.loads((ROOT / 'book/validation.json').read_text())
+    assert runtime['status'] == 'PASS' and runtime['scenario_count'] == 10
+    assert len(runtime['scenarios']) == 10 and all(s['status'] == 'PASS' for s in runtime['scenarios'])
     info = json.loads((SITE / 'build-info.json').read_text())
     assert info['chapter_count'] == len(expected), 'Chapter inventory differs from source.'
     assert [c['slug'] for c in info['chapters']] == [c['slug'] for c in expected]
@@ -125,7 +132,7 @@ def main():
     for record, chapter in zip(search, expected):
         assert normalized(record['text']) == normalized(''.join(docs[(SITE / 'chapters' / (chapter['slug'] + '.html')).resolve()].content))
     with zipfile.ZipFile(SITE / 'downloads/lab.zip') as archive:
-        for required in ['go.mod', 'go.sum', 'lab/schema.sql', 'cmd/worker/main.go', 'cmd/plancheck/main.go', 'experiments/model/run.py', 'experiments/model/fetch.sh', 'lab/README.md']:
+        for required in ['lab/run.py', 'lab/tools.Dockerfile', 'lab/README.md', 'LICENSE']:
             assert required in archive.namelist(), ('missing standalone experiment dependency', required)
         for name, digest in info['lab_files'].items():
             assert build.sha((ROOT / name).read_bytes()) == digest == build.sha(archive.read(name))
