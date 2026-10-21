@@ -71,7 +71,7 @@ def metadata() -> dict:
 
 
 def lab_files() -> list[Path]:
-    suffixes = {'.go', '.sql', '.mod', '.sum', '.py', '.json', '.toml', '.txt', '.md', '.sh', '.yaml', '.yml'}
+    suffixes = {'.Dockerfile', '.go', '.sql', '.mod', '.sum', '.py', '.json', '.toml', '.txt', '.md', '.sh', '.yaml', '.yml'}
     files = [p for folder in ['lab', 'tests', 'cmd', 'experiments'] for p in (ROOT / folder).rglob('*')
                   if p.is_file() and p.suffix in suffixes
                   and not any(part.startswith('.') or part == '__pycache__'

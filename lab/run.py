@@ -11,9 +11,12 @@ import secrets
 import subprocess
 import tempfile
 import time
+import urllib.request
 
 IMAGE = 'mysql@sha256:0f51e63e537a1f176423fa03ef559aabe6fa4372a53160a44bc7e75da7d15364'
 PASSWORD = 'recovery-lab-only'
+CLIENT_URL = 'https://repo.mysql.com/yum/mysql-8.4-community/el/9/x86_64/mysql-community-client-8.4.11-1.el9.x86_64.rpm'
+CLIENT_SHA256 = '2f1e8317c557363dd1554b29a9f6d69403802dc623fe72d9995f20f542771bb1'
 
 
 def call(args, data=None, check=True, timeout=180):
@@ -35,9 +38,40 @@ class Lab:
         self.output.parent.mkdir(parents=True, exist_ok=True)
 
     def sql(self, name, query, check=True):
+        return self.sql_result(name, query, check=check).stdout.decode().strip()
+
+    def sql_result(self, name, query, check=True):
         return call(['docker', 'exec', '-e', 'MYSQL_PWD=' + PASSWORD, self.prefix + '-' + name,
                      'mysql', '-uroot', '--batch', '--raw', '--skip-column-names', '-e', query],
-                    check=check).stdout.decode().strip()
+                    check=check)
+
+    def readonly_rejected(self, name, query):
+        result = self.sql_result(name, query, check=False)
+        error = result.stderr.decode(errors='replace')
+        assert result.returncode != 0 and 'ERROR 1290' in error and 'read-only' in error, error
+        return {'exit': result.returncode, 'mysql_error': error.strip()}
+
+    def prepare_tools(self):
+        context = Path(self.tmp.name) / 'tools'
+        context.mkdir()
+        rpm = context / 'client.rpm'
+        with urllib.request.urlopen(CLIENT_URL, timeout=90) as response:
+            rpm.write_bytes(response.read())
+        assert hashlib.sha256(rpm.read_bytes()).hexdigest() == CLIENT_SHA256
+        dockerfile = Path(__file__).with_name('tools.Dockerfile')
+        (context / 'Dockerfile').write_bytes(dockerfile.read_bytes())
+        call(['docker', 'build', '-t', self.prefix + '-tools', str(context)], timeout=240)
+        version = call(['docker', 'run', '--rm', '--network', 'none', self.prefix + '-tools',
+                        'mysqlbinlog', '--version']).stdout.decode().strip()
+        assert '8.4.11' in version
+        self.report['binlog_tool'] = {'url': CLIENT_URL, 'rpm_sha256': CLIENT_SHA256, 'version': version,
+                                     'architecture': 'linux/amd64'}
+
+    def archived_binlog(self, directory, filename, startpos, stoppos, check=True):
+        return call(['docker', 'run', '--rm', '--network', 'none', '--mount',
+                     f'type=bind,source={directory},target=/archive,readonly', self.prefix + '-tools',
+                     'mysqlbinlog', '--start-position=' + str(startpos), '--stop-position=' + str(stoppos),
+                     '/archive/' + filename], check=check)
 
     def feed(self, name, data):
         return call(['docker', 'exec', '-i', '-e', 'MYSQL_PWD=' + PASSWORD, self.prefix + '-' + name,
@@ -104,6 +138,7 @@ class Lab:
         self.sql('replica', 'STOP REPLICA; RESET REPLICA ALL; SET GLOBAL super_read_only=OFF;')
 
     def run(self):
+        self.prepare_tools()
         call(['docker', 'network', 'create', '--label', 'aias.mysql-recovery=' + self.prefix, self.network])
         for i, name in enumerate(['source', 'replica', 'restore', 'pitr'], 11):
             self.start(name, i)
@@ -168,21 +203,41 @@ class Lab:
         deleted = self.state('source')
         assert deleted['orders'] == 0
         self.sql('source', self.order(3001, 'after-delete', 7))
-        replay = call(['docker', 'exec', self.prefix + '-source', 'mysqlbinlog',
-                       '--start-position=' + str(startpos), '--stop-position=' + str(stoppos),
-                       '/var/lib/mysql/' + filename]).stdout
+        self.sql('source', 'FLUSH BINARY LOGS')
+        archive = Path(self.tmp.name) / 'archive'
+        archive.mkdir()
+        archived_file = archive / filename
+        call(['docker', 'cp', self.prefix + '-source:/var/lib/mysql/' + filename, str(archived_file)])
+        self.report['binlog_archive'] = {'file': filename, 'bytes': archived_file.stat().st_size,
+            'sha256': hashlib.sha256(archived_file.read_bytes()).hexdigest(),
+            'sealed_by_flush': True, 'replay_mount_readonly': True, 'replay_network': 'none'}
+        call(['docker', 'stop', '--time', '10', self.prefix + '-source'])
+        # Remove the actual required archive: the failure must not mutate the clean baseline.
+        held = archived_file.with_suffix('.held')
+        archived_file.rename(held)
+        missing = self.archived_binlog(archive, filename, startpos, stoppos, check=False)
+        assert missing.returncode != 0
+        assert self.state('pitr') == source_final and source_final['sha256'] != target['sha256']
+        self.check('missing-log-cannot-reach-target', mysqlbinlog_exit=missing.returncode,
+                   required_file=filename, baseline_unchanged=True, snapshot_differs_from_target=True)
+        held.rename(archived_file)
+        replay = self.archived_binlog(archive, filename, startpos, stoppos).stdout
         self.feed('pitr', replay)
         assert self.state('pitr') == target
         assert not self.sql('pitr', 'SELECT id FROM ledger.orders WHERE id=3001')
         self.check('transaction-boundary-pitr', start_position=startpos, stop_position=stoppos,
                    binlog=filename, expected=target, actual=self.state('pitr'), excluded=['delete-transaction','after-delete'],
-                   target_source_gtid=target_gtid, replay_sha256=hashlib.sha256(replay).hexdigest())
-        missing = call(['docker', 'exec', self.prefix + '-source', 'mysqlbinlog',
-                        '/var/lib/mysql/not-archived.999999'], check=False)
-        assert missing.returncode != 0
-        assert restored['sha256'] != target['sha256']
-        self.check('missing-log-cannot-reach-target', mysqlbinlog_exit=missing.returncode,
-                   snapshot_differs_from_target=True)
+                   target_source_gtid=target_gtid, replay_sha256=hashlib.sha256(replay).hexdigest(),
+                   source_running_during_replay=False, archive=self.report['binlog_archive'])
+        call(['docker', 'start', self.prefix + '-source'])
+        for _ in range(60):
+            try:
+                if self.sql('source', 'SELECT 1') == '1':
+                    break
+            except RuntimeError:
+                time.sleep(1)
+        else:
+            raise RuntimeError('Source did not restart after offline archive replay')
         self.wait_replica()
         assert self.state('replica')['orders'] == 1  # it received the accidental deletion too
         self.check('accidental-delete-replicates', replica_orders=1, recovered_pitr_orders=target['orders'])
@@ -209,15 +264,15 @@ class Lab:
             assert 'FENCE_REQUIRED' in str(error)
         else:
             raise AssertionError('Unsafe promotion was accepted')
-        denied = self.sql('replica', self.order(6000, 'must-reject'), check=False)
-        assert denied == '' and self.state('replica') == failover_prefix
+        denied = self.readonly_rejected('replica', self.order(6000, 'must-reject'))
+        assert self.state('replica') == failover_prefix
         assert self.sql('replica', 'SELECT @@GLOBAL.super_read_only') == '1'
-        self.check('unfenced-promotion-refused', old_primary_running=True, replica_remains_read_only=True)
+        self.check('unfenced-promotion-refused', old_primary_running=True, replica_remains_read_only=True,
+                   actual_write_rejection=denied)
         failure_start = time.monotonic()
         call(['docker', 'stop', '--time', '10', self.prefix + '-source'])
         self.promote()
         self.sql('replica', self.order(6001, 'new-primary-only', 19))
-        new_primary_ready = time.monotonic()
         promoted = self.state('replica')
         assert not self.sql('replica', 'SELECT id FROM ledger.orders WHERE id=5001')
         assert self.sql('replica', 'SELECT tag FROM ledger.orders WHERE id=6001') == 'new-primary-only'
@@ -225,6 +280,7 @@ class Lab:
         expected_rows = failover_prefix['rows'] + ['6001\t19\tnew-primary-only']
         assert promoted['rows'] == expected_rows
         assert promoted['balance'] == failover_prefix['balance'] - 19
+        new_primary_ready = time.monotonic()
         self.check('fenced-manual-failover-with-observed-loss', source_before_failure=source_before_failure,
                    surviving_prefix=failover_prefix, promoted=promoted, lost_acknowledged_order_ids=[5001],
                    rpo_lost_transactions=1, observed_window_seconds=round(source_ack_time-prefix_time, 4),
@@ -241,15 +297,14 @@ class Lab:
                 time.sleep(1)
         else:
             raise RuntimeError('Returning source did not start')
-        denied = self.sql('source', self.order(7001, 'old-primary-reject'), check=False)
-        assert denied == ''
+        denied = self.readonly_rejected('source', self.order(7001, 'old-primary-reject'))
         assert not self.sql('source', 'SELECT id FROM ledger.orders WHERE id=7001')
         assert not self.sql('source', 'SELECT id FROM ledger.orders WHERE id=6001')
         networks = json.loads(call(['docker', 'inspect', '--format', '{{json .NetworkSettings.Networks}}', self.prefix + '-source']).stdout)
         assert not networks
         self.check('returning-old-primary-quarantined', networks=networks,
                    super_read_only=self.sql('source', 'SELECT @@GLOBAL.super_read_only'),
-                   divergent_old_state=True, automatically_rejoined=False)
+                   divergent_old_state=True, automatically_rejoined=False, actual_write_rejection=denied)
         self.report['status'] = 'PASS'
         self.report['scenario_count'] = len(self.report['scenarios'])
         assert self.report['scenario_count'] == 10
@@ -259,6 +314,7 @@ class Lab:
         for name in self.names:
             call(['docker', 'rm', '-f', '-v', self.prefix + '-' + name], check=False)
         call(['docker', 'network', 'rm', self.network], check=False)
+        call(['docker', 'image', 'rm', self.prefix + '-tools'], check=False)
         self.tmp.cleanup()
 
 

@@ -1,0 +1,15 @@
+{
+  "title": "MySQL 备份、复制与恢复演练：从数据保护到故障切换",
+  "subtitle": "用真实账本验证一致快照、事务回放与写入边界",
+  "author": "Aias00",
+  "lang": "zh-CN",
+  "repository": "https://github.com/Aias00/mysql-recovery-book",
+  "slug": "mysql-recovery-book",
+  "version": "1.0.0",
+  "description": "通过真实MySQL四实例与业务账本，演练并发一致快照、干净恢复、binlog精确位置回放、GTID复制、异步数据丢失和隔离旧主后的手工提升。",
+  "rights": "© 2026 Aias00. 保留所有权利。",
+  "cover_lines": ["MySQL 备份", "复制与恢复演练"],
+  "cover_label": "MYSQL RECOVERY ENGINEERING",
+  "cover_subtitle": "一致快照 · 事务回放 · 故障切换",
+  "include_code": true
+}
