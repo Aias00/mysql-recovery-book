@@ -1,0 +1,184 @@
+{
+  "status": "PASS",
+  "reviewed_source_commit": "c0681a952fe762a0abf17e07348ebee029b692ef",
+  "body_chapters": 18,
+  "body_cjk": 25315,
+  "authored_units_read": [
+    "book/chapters/00-preface.md",
+    "book/chapters/01-recovery-contract.md",
+    "book/chapters/02-isolated-topology.md",
+    "book/chapters/03-commit-boundaries.md",
+    "book/chapters/04-backup-strategy.md",
+    "book/chapters/05-consistent-snapshot.md",
+    "book/chapters/06-clean-restore.md",
+    "book/chapters/07-binlog-archive.md",
+    "book/chapters/08-position-pitr.md",
+    "book/chapters/09-accidental-delete.md",
+    "book/chapters/10-gtid.md",
+    "book/chapters/11-replication-bootstrap.md",
+    "book/chapters/12-delay-catchup.md",
+    "book/chapters/13-observed-data-loss.md",
+    "book/chapters/14-fence-old-primary.md",
+    "book/chapters/15-promote-and-quarantine.md",
+    "book/chapters/16-recovery-validation.md",
+    "book/chapters/17-rpo-rto.md",
+    "book/chapters/18-rehearsal-system.md",
+    "book/chapters/90-exercise-answers.md",
+    "book/chapters/91-sources.md",
+    "book/chapters/92-glossary.md"
+  ],
+  "code_read": [
+    "lab/run.py",
+    "lab/tools.Dockerfile",
+    ".github/workflows/pages.yml"
+  ],
+  "sources": [
+    {
+      "id": "R01",
+      "cache": "research/cache/using-mysqldump.html",
+      "sha256": "b709140fa3f7698adf0393ec572a1768ceb6bae6d8223f40f66a4944aa598019",
+      "status": "PASS"
+    },
+    {
+      "id": "R02",
+      "cache": "research/cache/mysqldump.html",
+      "sha256": "8851ec12f70deeabda71289b50b867a2929ce0b68d3b3b5bdd81787cdffa3dfa",
+      "status": "PASS"
+    },
+    {
+      "id": "R03",
+      "cache": "research/cache/point-in-time-recovery.html",
+      "sha256": "7b4d9a6f018d0119089e344946df2c84dd65ace396ede4baa782ea40696fbc8e",
+      "status": "PASS"
+    },
+    {
+      "id": "R04",
+      "cache": "research/cache/point-in-time-recovery-positions.html",
+      "sha256": "4e6a691730d0ec03cc736581553790e01d2993d6a0fdb3a9236a0df0fcfe3a8f",
+      "status": "PASS"
+    },
+    {
+      "id": "R05",
+      "cache": "research/cache/replication-gtids.html",
+      "sha256": "cfcc065db9a6621ff943e87a1ac1fa7dea2c4799077f64b8a6398c216acde633",
+      "status": "PASS"
+    },
+    {
+      "id": "R06",
+      "cache": "research/cache/replication-gtids-howto.html",
+      "sha256": "ff71338a2b0845b3bb3d9ee2c15ce696a80ffbf80df2fa0ef8699046d5af3688",
+      "status": "PASS"
+    },
+    {
+      "id": "R07",
+      "cache": "research/cache/replication-threads.html",
+      "sha256": "90f7b3ecea73b749f1d433df870aeef1c116118512dc23f5c9dfe2a172b80f3f",
+      "status": "PASS"
+    },
+    {
+      "id": "R08",
+      "cache": "research/cache/replication-solutions-switch.html",
+      "sha256": "ed0d10e835c28e2eff2b18719201f9febf1cb25defd6ea05c5a55aa3ff26a488",
+      "status": "PASS"
+    },
+    {
+      "id": "R09",
+      "cache": "research/cache/mysqlbinlog.html",
+      "sha256": "c07e3150d9cd3790ed8dd0137d59a9f536b2ecfeeae5d2aec891ce95d615a1f5",
+      "status": "PASS"
+    },
+    {
+      "id": "R10",
+      "cache": "research/cache/show-replica-status.html",
+      "sha256": "f67613deee8956092ddf13b5d003f7d8acd3660fc39b19a3e6e1ea6e0917db32",
+      "status": "PASS"
+    },
+    {
+      "id": "R11",
+      "cache": "research/cache/backup-types.html",
+      "sha256": "250b4296a31e6a67bacc79b81ef7bcaf04df88621d4ab0ae84977b692f83137b",
+      "status": "PASS"
+    }
+  ],
+  "findings": [
+    {
+      "id": "MYSQL-PROMOTION-001",
+      "severity": "high",
+      "original_commit": "5efd8ea2a001b0323c223b105b20cdb2f0aaa8cd",
+      "issue": "Promotion disabled super_read_only only; read_only remained on, while root business writes could bypass it.",
+      "resolution": "c0681a952fe762a0abf17e07348ebee029b692ef explicitly disables and asserts both flags; all business writes/readonly negatives use limited ledger_app, grants recorded.",
+      "state": "RESOLVED_AND_REAL_SOURCE_PLUS_ARCHIVE_CI_VERIFIED"
+    }
+  ],
+  "review_checks": {
+    "consistent_snapshot": "InnoDB/no concurrent DDL boundary accurate; real dump overlaps increasing committed order count; restore invariants and count bracket match code.",
+    "pitr": "Real sealed binlog copied to independent archive, source stopped, mysqlbinlog network none/readonly mount, exact complete-transaction stop position and explicit excluded transaction verified.",
+    "gtid": "Independent PITR with set-gtid-purged OFF is not represented as production replica bootstrap or automatic rejoin.",
+    "async_loss": "Entire channel stopped before acknowledged 5001 transaction; failed promoted target lacks it; no zero-loss claim.",
+    "fencing": "Actual source stopped before promotion, refusal negative while running, returning source network detached before start and readonly negative; no HA/routing claim.",
+    "rto": "Timer begins before docker stop, ends after new-primary commit and full business comparison; text includes grace/possible kill and excludes detection/routing/client retries.",
+    "inventory": "Ten exact scenario names required in source and archive CI; no skip path."
+  },
+  "runtime_evidence_pending": null,
+  "limitations": [
+    "Reviewer has no Docker daemon; runtime conclusions require original successful Linux CI and downloaded machine-readable reports, not local static checks.",
+    "No further substantive manuscript/code inconsistency found after reading all 18 body chapters, preface and 3 authored appendices."
+  ],
+  "runtime_evidence": [
+    {
+      "file": "/tmp/mysql-recovery-cross-final/runtime.json",
+      "sha256": "1ebc4b25ec9fc24ac63c661f2fcdbfe9f126e5fa357d945cd201096235041026",
+      "status": "PASS",
+      "scenario_count": 10,
+      "business_user": "ledger_app",
+      "promoted_read_only": "0",
+      "promoted_super_read_only": "0",
+      "both_readonly_negative_errors": 1290,
+      "stop_observations": [
+        {
+          "stage": "offline-archive-replay",
+          "running": false,
+          "exit_code": 137,
+          "finished_at": "2026-10-21T12:18:10.858535777Z",
+          "grace_seconds": 10
+        },
+        {
+          "stage": "failover-fence",
+          "running": false,
+          "exit_code": 137,
+          "finished_at": "2026-10-21T12:18:27.796229008Z",
+          "grace_seconds": 10
+        }
+      ],
+      "rto_seconds": 10.624
+    },
+    {
+      "file": "/tmp/mysql-recovery-cross-final/archive-runtime.json",
+      "sha256": "3dbb424d49ef4be72615c8185ca7c1a996f613add69eb638921070f6d99fe3ac",
+      "status": "PASS",
+      "scenario_count": 10,
+      "business_user": "ledger_app",
+      "promoted_read_only": "0",
+      "promoted_super_read_only": "0",
+      "both_readonly_negative_errors": 1290,
+      "stop_observations": [
+        {
+          "stage": "offline-archive-replay",
+          "running": false,
+          "exit_code": 137,
+          "finished_at": "2026-10-21T12:19:42.163309116Z",
+          "grace_seconds": 10
+        },
+        {
+          "stage": "failover-fence",
+          "running": false,
+          "exit_code": 137,
+          "finished_at": "2026-10-21T12:19:59.098760627Z",
+          "grace_seconds": 10
+        }
+      ],
+      "rto_seconds": 10.6289
+    }
+  ],
+  "ci_run_url": "https://github.com/Aias00/mysql-recovery-book/actions/runs/39598252259"
+}

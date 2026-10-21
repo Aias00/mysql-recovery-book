@@ -1,0 +1,24 @@
+{
+  "status": "PASS",
+  "source_sha": "c0681a952fe762a0abf17e07348ebee029b692ef",
+  "ci_run": 39598252259,
+  "release": "v1.0.0",
+  "epub_bytes": 97994,
+  "epub_sha256": "c794fbfa88b1b9bb775e80ce33723a050e7b11ff2e05ea2462a5ae41dd7830a0",
+  "ci_pages_release_identical": true,
+  "all_public_chapters_match_source": 23,
+  "body_chapters": 18,
+  "appendices": 4,
+  "body_cjk_excluding_code": 25315,
+  "public_zip_matches_ci_and_source": true,
+  "public_runtime_matches_ci": true,
+  "public_reader_browser": "PASS all23 x320/390px; no-JS all23 x320/390; search/font/themes/storage-denied/downloads",
+  "public_epubcheck": "PASS 0fatals/0errors/0warnings",
+  "independent_editorial_review": "/tmp/mysql-recovery-round3-independent-review.json",
+  "real_mysql_runs": {
+    "source": 10,
+    "independent_zip": 10,
+    "skips": 0
+  },
+  "scope": "Manual isolated Docker failover; privileged role operations but ordinary ledger_app business writes; both read_only flags explicitly OFF on new primary; no HA/routing/zero-loss claim"
+}

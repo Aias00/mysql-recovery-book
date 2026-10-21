@@ -11,7 +11,7 @@
       "name": "consistent-snapshot-under-writes",
       "status": "PASS",
       "source_count_before": 3,
-      "source_count_after": 7,
+      "source_count_after": 6,
       "restored": {
         "orders": 4,
         "balance": 99897,
@@ -25,8 +25,8 @@
         ]
       },
       "final_source_orders": 121,
-      "dump_seconds": 0.2417,
-      "dump_sha256": "bfb7b4f5986b7f750d16680abab7fb081ba1f618248e5c55a9e36a3c26276852"
+      "dump_seconds": 0.1932,
+      "dump_sha256": "e069f15f7accaf8e43cc509ecebd97d8a06e57afb57a5717dfa51b23b6b5c3be"
     },
     {
       "name": "clean-baseline-restore",
@@ -443,13 +443,13 @@
         "delete-transaction",
         "after-delete"
       ],
-      "target_source_gtid": "305a80d0-cd47-11f1-8680-3efb38bc5579:1-137",
-      "replay_sha256": "06460890c3c2cb1d49d3f45eaeba8a5181d28e30e77b4a524d0184968e9a787a",
+      "target_source_gtid": "5b1c5276-cd49-11f1-92e0-a6df2983ba15:1-139",
+      "replay_sha256": "0fac3c5521617d375da6879702e9511492db9ab020f4d0d27b9ea68abd212df3",
       "source_running_during_replay": false,
       "archive": {
         "file": "mysql-bin.000004",
         "bytes": 7226,
-        "sha256": "01f73436fc7dd3b8ebc59e79698a68daf15e524a5f9350dc3a5766d796077120",
+        "sha256": "c5a68925f2c57a8293d37838636791592066bd22ff87918008bfa939877ca9ce",
         "sealed_by_flush": true,
         "replay_mount_readonly": true,
         "replay_network": "none"
@@ -490,8 +490,9 @@
       "old_primary_running": true,
       "replica_remains_read_only": true,
       "actual_write_rejection": {
+        "user": "ledger_app",
         "exit": 1,
-        "mysql_error": "ERROR 1290 (HY000) at line 1: The MySQL server is running with the --super-read-only option so it cannot execute this statement"
+        "mysql_error": "ERROR 1290 (HY000) at line 1: The MySQL server is running with the --read-only option so it cannot execute this statement"
       }
     },
     {
@@ -533,8 +534,11 @@
         5001
       ],
       "rpo_lost_transactions": 1,
-      "observed_window_seconds": 0.0556,
-      "manual_rto_seconds": 10.6152,
+      "observed_window_seconds": 0.049,
+      "manual_rto_seconds": 10.624,
+      "business_user": "ledger_app",
+      "read_only": "0",
+      "super_read_only": "0",
       "rto_boundary": "docker-stop invocation to verified new-primary business commit; excludes detection/routing/client retry"
     },
     {
@@ -545,12 +549,14 @@
       "divergent_old_state": true,
       "automatically_rejoined": false,
       "actual_write_rejection": {
+        "user": "ledger_app",
         "exit": 1,
-        "mysql_error": "ERROR 1290 (HY000) at line 1: The MySQL server is running with the --super-read-only option so it cannot execute this statement"
+        "mysql_error": "ERROR 1290 (HY000) at line 1: The MySQL server is running with the --read-only option so it cannot execute this statement"
       }
     }
   ],
   "scope": "Isolated Linux Docker bridge; teaching data; manual failover; no production routing, automatic HA or cross-region claim.",
+  "source_sha": "c0681a952fe762a0abf17e07348ebee029b692ef",
   "binlog_tool": {
     "url": "https://repo.mysql.com/yum/mysql-8.4-community/el/9/x86_64/mysql-community-client-8.4.11-1.el9.x86_64.rpm",
     "rpm_sha256": "2f1e8317c557363dd1554b29a9f6d69403802dc623fe72d9995f20f542771bb1",
@@ -562,13 +568,34 @@
   "image_inspect": [
     "mysql@sha256:0f51e63e537a1f176423fa03ef559aabe6fa4372a53160a44bc7e75da7d15364"
   ],
+  "business_identity": {
+    "user": "ledger_app",
+    "grants": "GRANT USAGE ON *.* TO `ledger_app`@`%`\nGRANT SELECT, INSERT, UPDATE, DELETE ON `ledger`.* TO `ledger_app`@`%`",
+    "scope": "ledger.* DML; no administrative privileges"
+  },
   "binlog_archive": {
     "file": "mysql-bin.000004",
     "bytes": 7226,
-    "sha256": "01f73436fc7dd3b8ebc59e79698a68daf15e524a5f9350dc3a5766d796077120",
+    "sha256": "c5a68925f2c57a8293d37838636791592066bd22ff87918008bfa939877ca9ce",
     "sealed_by_flush": true,
     "replay_mount_readonly": true,
     "replay_network": "none"
   },
+  "stop_observations": [
+    {
+      "stage": "offline-archive-replay",
+      "running": false,
+      "exit_code": 137,
+      "finished_at": "2026-10-21T12:18:10.858535777Z",
+      "grace_seconds": 10
+    },
+    {
+      "stage": "failover-fence",
+      "running": false,
+      "exit_code": 137,
+      "finished_at": "2026-10-21T12:18:27.796229008Z",
+      "grace_seconds": 10
+    }
+  ],
   "scenario_count": 10
 }
