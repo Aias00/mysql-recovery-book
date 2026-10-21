@@ -127,7 +127,8 @@ class Lab:
 
     def wait_replica(self):
         gtid = self.sql('source', 'SELECT @@GLOBAL.gtid_executed')
-        assert self.sql('replica', f"SELECT WAIT_FOR_EXECUTED_GTID_SET('{gtid}',30)") == '0'
+        result = self.sql('replica', f"SELECT WAIT_FOR_EXECUTED_GTID_SET('{gtid}',30)")
+        assert result == '0', self.sql('replica', 'SHOW REPLICA STATUS\\G')
         assert self.state('source') == self.state('replica')
         return gtid
 
@@ -146,7 +147,7 @@ class Lab:
         self.report['server_variables'] = self.sql('source', 'SELECT @@gtid_mode,@@enforce_gtid_consistency,@@binlog_format,@@binlog_row_image,@@sync_binlog,@@innodb_flush_log_at_trx_commit')
         self.report['image_inspect'] = json.loads(call(['docker', 'image', 'inspect', IMAGE, '--format', '{{json .RepoDigests}}']).stdout)
         self.sql('source', "CREATE USER 'repl'@'%' IDENTIFIED BY 'replica-lab-only'; GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';")
-        self.sql('replica', "CHANGE REPLICATION SOURCE TO SOURCE_HOST='source',SOURCE_USER='repl',SOURCE_PASSWORD='replica-lab-only',SOURCE_AUTO_POSITION=1,GET_SOURCE_PUBLIC_KEY=1; START REPLICA; SET GLOBAL super_read_only=ON;")
+        self.sql('replica', "CHANGE REPLICATION SOURCE TO SOURCE_HOST='source',SOURCE_USER='repl',SOURCE_PASSWORD='replica-lab-only',SOURCE_AUTO_POSITION=1,SOURCE_CONNECT_RETRY=1,GET_SOURCE_PUBLIC_KEY=1; START REPLICA; SET GLOBAL super_read_only=ON;")
         self.sql('source', '''CREATE DATABASE ledger; USE ledger;
             CREATE TABLE accounts(id INT PRIMARY KEY,balance BIGINT NOT NULL) ENGINE=InnoDB;
             CREATE TABLE orders(id INT PRIMARY KEY,amount INT NOT NULL,tag VARCHAR(40) NOT NULL) ENGINE=InnoDB;
@@ -238,6 +239,9 @@ class Lab:
                 time.sleep(1)
         else:
             raise RuntimeError('Source did not restart after offline archive replay')
+        # Restart receiver explicitly; do not let its default reconnect backoff
+        # become an undocumented 60-second wait in a 30-second assertion.
+        self.sql('replica', 'STOP REPLICA IO_THREAD; START REPLICA IO_THREAD;')
         self.wait_replica()
         assert self.state('replica')['orders'] == 1  # it received the accidental deletion too
         self.check('accidental-delete-replicates', replica_orders=1, recovered_pitr_orders=target['orders'])
