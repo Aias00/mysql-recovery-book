@@ -10,6 +10,8 @@ python3 lab/run.py --evidence evidence/runtime.json
 
 10个场景必须全部 PASS：GTID复制建立、写入期间的一致快照、干净基线恢复、事务边界PITR、缺失日志不可达到目标、误删同样复制、应用暂停再追平、未隔离拒绝提升、隔离后手工提升并观测已确认事务丢失、返回旧主断网且只读。
 
+业务写入由ledger_app执行，仅具有ledger.*的SELECT/INSERT/UPDATE/DELETE，没有SUPER或CONNECTION_ADMIN。提升显式关闭super_read_only和read_only并检查0/0，再用该普通业务账号提交与查询。角色管理、备份和核对使用root。
+
 事务业务不变量：账户余额=100000+分录delta之和；订单与分录逐行一一对应；分录金额等于订单金额相反数。恢复目标还比较全部有序订单、余额和分录总和的SHA-256，不能仅用行数或线程状态判定成功。
 
 RTO仅计本次docker stop发起到新主成功提交并查询确认的手工流程，排除故障发现、路由、DNS与客户端重试。RPO报告实际缺失事务ID和数量；观察窗口是停止复制后相邻客户端观测间隔，不是线上RPO保证。

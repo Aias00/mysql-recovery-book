@@ -41,16 +41,19 @@ class Lab:
     def sql(self, name, query, check=True):
         return self.sql_result(name, query, check=check).stdout.decode().strip()
 
-    def sql_result(self, name, query, check=True):
+    def sql_result(self, name, query, check=True, user='root'):
         return call(['docker', 'exec', '-e', 'MYSQL_PWD=' + PASSWORD, self.prefix + '-' + name,
-                     'mysql', '-uroot', '--batch', '--raw', '--skip-column-names', '-e', query],
+                     'mysql', '-u' + user, '--batch', '--raw', '--skip-column-names', '-e', query],
                     check=check)
 
+    def business(self, name, query):
+        return self.sql_result(name, query, user='ledger_app').stdout.decode().strip()
+
     def readonly_rejected(self, name, query):
-        result = self.sql_result(name, query, check=False)
+        result = self.sql_result(name, query, check=False, user='ledger_app')
         error = result.stderr.decode(errors='replace')
         assert result.returncode != 0 and 'ERROR 1290' in error and 'read-only' in error, error
-        return {'exit': result.returncode, 'mysql_error': error.strip()}
+        return {'user': 'ledger_app', 'exit': result.returncode, 'mysql_error': error.strip()}
 
     def prepare_tools(self):
         context = Path(self.tmp.name) / 'tools'
@@ -146,7 +149,8 @@ class Lab:
         running = call(['docker', 'inspect', '--format', '{{.State.Running}}', self.prefix + '-source']).stdout.strip()
         if running != b'false':
             raise RuntimeError('FENCE_REQUIRED: old primary remains running; promotion refused')
-        self.sql('replica', 'STOP REPLICA; RESET REPLICA ALL; SET GLOBAL super_read_only=OFF;')
+        self.sql('replica', 'STOP REPLICA; RESET REPLICA ALL; SET GLOBAL super_read_only=OFF; SET GLOBAL read_only=OFF;')
+        assert self.sql('replica', 'SELECT @@GLOBAL.read_only,@@GLOBAL.super_read_only') == '0\t0'
 
     def run(self):
         self.prepare_tools()
@@ -157,6 +161,11 @@ class Lab:
         self.report['server_variables'] = self.sql('source', 'SELECT @@gtid_mode,@@enforce_gtid_consistency,@@binlog_format,@@binlog_row_image,@@sync_binlog,@@innodb_flush_log_at_trx_commit')
         self.report['image_inspect'] = json.loads(call(['docker', 'image', 'inspect', IMAGE, '--format', '{{json .RepoDigests}}']).stdout)
         self.sql('source', "CREATE USER 'repl'@'%' IDENTIFIED BY 'replica-lab-only'; GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';")
+        self.sql('source', f"CREATE USER 'ledger_app'@'%' IDENTIFIED BY '{PASSWORD}'; GRANT SELECT,INSERT,UPDATE,DELETE ON ledger.* TO 'ledger_app'@'%';")
+        grants = self.sql('source', "SHOW GRANTS FOR 'ledger_app'@'%'")
+        assert 'SUPER' not in grants and 'CONNECTION_ADMIN' not in grants and 'ALL PRIVILEGES' not in grants
+        self.report['business_identity'] = {'user': 'ledger_app', 'grants': grants,
+                                           'scope': 'ledger.* DML; no administrative privileges'}
         self.sql('replica', "CHANGE REPLICATION SOURCE TO SOURCE_HOST='source',SOURCE_USER='repl',SOURCE_PASSWORD='replica-lab-only',SOURCE_AUTO_POSITION=1,SOURCE_CONNECT_RETRY=1,GET_SOURCE_PUBLIC_KEY=1; START REPLICA; SET GLOBAL super_read_only=ON;")
         self.sql('source', '''CREATE DATABASE ledger; USE ledger;
             CREATE TABLE accounts(id INT PRIMARY KEY,balance BIGINT NOT NULL) ENGINE=InnoDB;
@@ -164,14 +173,14 @@ class Lab:
             CREATE TABLE entries(id INT PRIMARY KEY,order_id INT UNIQUE NOT NULL,delta INT NOT NULL) ENGINE=InnoDB;
             CREATE TABLE padding(id INT PRIMARY KEY,payload LONGTEXT NOT NULL) ENGINE=InnoDB;
             INSERT INTO accounts VALUES(1,100000);''')
-        self.sql('source', self.order(1, 'opening-order', 100))
+        self.business('source', self.order(1, 'opening-order', 100))
         # Slow enough for real dump/commit overlap, but padding is never a business invariant.
         self.sql('source', "SET SESSION cte_max_recursion_depth=3000; INSERT INTO ledger.padding WITH RECURSIVE seq AS (SELECT 1 n UNION ALL SELECT n+1 FROM seq WHERE n<2000) SELECT n,REPEAT('x',8192) FROM seq;")
         self.wait_replica()
         self.check('replication-bootstrap', source_equals_replica=True)
         writer_sql = ''.join(self.order(i, 'backup-concurrent') + ' DO SLEEP(0.08);' for i in range(2, 122))
         writer = subprocess.Popen(['docker', 'exec', '-i', '-e', 'MYSQL_PWD=' + PASSWORD,
-                                  self.prefix + '-source', 'mysql', '-uroot'], stdin=subprocess.PIPE,
+                                  self.prefix + '-source', 'mysql', '-uledger_app'], stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         writer.stdin.write(writer_sql.encode()); writer.stdin.close(); writer.stdin = None
         deadline = time.monotonic() + 15
@@ -202,18 +211,18 @@ class Lab:
         self.feed('pitr', baseline)
         assert self.state('pitr') == source_final
         self.check('clean-baseline-restore', baseline=source_final, binlog=filename, start_position=startpos)
-        self.sql('source', self.order(2001, 'keep-before-delete', 17))
-        self.sql('source', self.order(2002, 'keep-second', 23))
+        self.business('source', self.order(2001, 'keep-before-delete', 17))
+        self.business('source', self.order(2002, 'keep-second', 23))
         target = self.state('source')
         status = self.sql('source', 'SHOW BINARY LOG STATUS').split('\t')
         assert status[0] == filename
         stoppos = int(status[1])
         target_gtid = self.sql('source', 'SELECT @@GLOBAL.gtid_executed')
         # This unwanted transaction is valid SQL and replicates: replication is not a backup.
-        self.sql('source', 'START TRANSACTION; DELETE FROM ledger.entries; DELETE FROM ledger.orders; UPDATE ledger.accounts SET balance=100000 WHERE id=1; COMMIT;')
+        self.business('source', 'START TRANSACTION; DELETE FROM ledger.entries; DELETE FROM ledger.orders; UPDATE ledger.accounts SET balance=100000 WHERE id=1; COMMIT;')
         deleted = self.state('source')
         assert deleted['orders'] == 0
-        self.sql('source', self.order(3001, 'after-delete', 7))
+        self.business('source', self.order(3001, 'after-delete', 7))
         self.sql('source', 'FLUSH BINARY LOGS')
         archive = Path(self.tmp.name) / 'archive'
         archive.mkdir()
@@ -257,7 +266,7 @@ class Lab:
         self.check('accidental-delete-replicates', replica_orders=1, recovered_pitr_orders=target['orders'])
         self.sql('replica', 'STOP REPLICA SQL_THREAD')
         applied = self.state('replica')
-        self.sql('source', self.order(4001, 'delayed-apply', 11))
+        self.business('source', self.order(4001, 'delayed-apply', 11))
         wanted = self.sql('source', 'SELECT @@GLOBAL.gtid_executed')
         assert self.state('replica') == applied
         assert self.sql('replica', f"SELECT GTID_SUBSET('{wanted}',@@GLOBAL.gtid_executed)") == '0'
@@ -267,7 +276,7 @@ class Lab:
         self.sql('replica', 'STOP REPLICA')
         failover_prefix = self.state('replica')
         prefix_time = time.monotonic()
-        self.sql('source', self.order(5001, 'acknowledged-but-not-replicated', 13))
+        self.business('source', self.order(5001, 'acknowledged-but-not-replicated', 13))
         source_ack_time = time.monotonic()
         source_before_failure = self.state('source')
         assert source_before_failure['orders'] == failover_prefix['orders'] + 1
@@ -286,10 +295,10 @@ class Lab:
         failure_start = time.monotonic()
         self.stop_source('failover-fence')
         self.promote()
-        self.sql('replica', self.order(6001, 'new-primary-only', 19))
+        self.business('replica', self.order(6001, 'new-primary-only', 19))
         promoted = self.state('replica')
         assert not self.sql('replica', 'SELECT id FROM ledger.orders WHERE id=5001')
-        assert self.sql('replica', 'SELECT tag FROM ledger.orders WHERE id=6001') == 'new-primary-only'
+        assert self.business('replica', 'SELECT tag FROM ledger.orders WHERE id=6001') == 'new-primary-only'
         assert promoted['orders'] == failover_prefix['orders'] + 1
         expected_rows = failover_prefix['rows'] + ['6001\t19\tnew-primary-only']
         assert promoted['rows'] == expected_rows
@@ -299,6 +308,8 @@ class Lab:
                    surviving_prefix=failover_prefix, promoted=promoted, lost_acknowledged_order_ids=[5001],
                    rpo_lost_transactions=1, observed_window_seconds=round(source_ack_time-prefix_time, 4),
                    manual_rto_seconds=round(new_primary_ready-failure_start, 4),
+                   business_user='ledger_app', read_only=self.sql('replica', 'SELECT @@GLOBAL.read_only'),
+                   super_read_only=self.sql('replica', 'SELECT @@GLOBAL.super_read_only'),
                    rto_boundary='docker-stop invocation to verified new-primary business commit; excludes detection/routing/client retry')
         # A returning old primary stays disconnected; fence its writes before any possible rejoin.
         call(['docker', 'network', 'disconnect', self.network, self.prefix + '-source'])
